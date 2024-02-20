@@ -19,19 +19,21 @@ std::string load_file(const std::string& file) {
 }
 
 
-mgm::Result<std::string, mgm::System::CompilationError> shader_convert(mgm::System& system, mgm::System::Source& src, const std::unordered_map<std::string, std::vector<std::string>>& found_words) {
-    std::string res = "#version 450 core\n";
-    for (const auto& word : found_words.at("var")) {
-        const auto parsed_word = system.parse(word);
-        if (parsed_word.is_error()) {
-            for (const auto& err : parsed_word.error())
-                std::cerr << "Error at " << err.pos.line << ':' << err.pos.column << "\n\t" << err.message << std::endl;
-            return mgm::System::CompilationError{parsed_word.error()[0]};
+struct ShaderExtension : public mgm::System::Extension {
+    virtual mgm::Result<std::string> operator()(mgm::System& system, const std::unordered_map<std::string, std::vector<std::string>>& found_words) override {
+        std::string res = "#version 450 core\n";
+        for (const auto& word : found_words.at("var")) {
+            const auto parsed_word = system.parse(word);
+            if (parsed_word.is_error()) {
+                for (const auto& err : parsed_word.error())
+                    std::cerr << "Error at " << err.pos.line << ':' << err.pos.column << "\n\t" << err.message << std::endl;
+                return mgm::Error{ static_cast<int64_t>(parsed_word.error()[0].code), parsed_word.error()[0].message };
+            }
+            res += parsed_word.result() + '\n';
         }
-        res += parsed_word.result() + '\n';
+        return res;
     }
-    return res;
-}
+};
 
 
 int main() {
@@ -39,8 +41,8 @@ int main() {
 
     mgm::System mp{};
 
+    mp.add_extension("SHADER", ShaderExtension{});
     mp.rules.emplace_back(
-        &shader_convert,
         "^  vertex",
         "^  fragment",
         "   {",
@@ -50,7 +52,8 @@ int main() {
         "   code:",
         " *$code",
         " * ;",
-        "   }"
+        "   }",
+        "  +\"$SHADER\nvoid main() {\n$($code;\n)}\""
     );
     mp.rules.emplace_back(
         "   var",
