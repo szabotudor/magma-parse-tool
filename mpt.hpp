@@ -579,7 +579,7 @@ namespace mgm {
             std::optional<CustomExpandFunc> custom_expand_func{};
 
             size_t num_words() const {
-                return words.back().type().result() == Word::Type::EXPAND ? words.size() : words.size() - 1;
+                return words.back().type().result() == Word::Type::EXPAND ? words.size() - 1 : words.size();
             }
 
             Rule() = default;
@@ -964,8 +964,9 @@ namespace mgm {
                         else
                             res += parse_result.result();
                     }
-                    if (found_words[found_words.size() - 2].match.b > str.pos.pos)
-                        str += found_words[found_words.size() - 2].match.b - str.pos.pos;
+                    const auto last_word_is_expand = found_rule->words.back().type().result() == Rule::Word::Type::EXPAND ? 2 : 1;
+                    if (found_words[found_words.size() - last_word_is_expand].match.b > str.pos.pos)
+                        str += found_words[found_words.size() - last_word_is_expand].match.b - str.pos.pos;
                     continue;
                 }
 
