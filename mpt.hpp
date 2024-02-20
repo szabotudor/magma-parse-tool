@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <functional>
 #include <iostream>
-#include <optional>
 #include <vector>
 #include <unordered_map>
 #include <cstring>
@@ -356,15 +355,6 @@ namespace mgm {
             ~CompilationError() = default;
         };
 
-        struct Extension {
-            std::any user_data{};
-            std::function<Result<std::string>(System& system, Extension& extension, const std::unordered_map<std::string, std::vector<std::string>>& found_words)> expand_func{};
-
-            Extension() = default;
-
-            ~Extension() = default;
-        };
-
         private:
         static bool is_whitespace(const char c) {
             return c == ' ' || c == '\n' || c == '\t';
@@ -576,7 +566,6 @@ namespace mgm {
             using CustomExpandFunc = std::function<Result<std::string, CompilationError>(System& system, Source& source, const std::unordered_map<std::string, std::vector<std::string>>& found_words)>;
 
             std::vector<Word> words{};
-            std::optional<CustomExpandFunc> custom_expand_func{};
 
             size_t num_words() const {
                 return words.back().type().result() == Word::Type::EXPAND ? words.size() - 1 : words.size();
@@ -592,14 +581,6 @@ namespace mgm {
                     std::cerr << "Invalid rule: " << valid.error().message << std::endl;
                 }
             }
-            template<typename... Ts, std::enable_if_t<(std::is_constructible_v<Word, Ts> && ...), bool> = true>
-            Rule(const CustomExpandFunc& custom_expand_func, Ts&&... args) : words{Word{std::forward<Ts>(args)}...}, custom_expand_func{CustomExpandFunc{custom_expand_func}} {
-                const auto valid = is_valid();
-                if (is_valid().is_error()) {
-                    words.clear();
-                    std::cerr << "Invalid rule: " << valid.error().message << std::endl;
-                }
-            }
 
             Result<bool> is_valid() const {
                 if (words.empty())
@@ -608,14 +589,10 @@ namespace mgm {
                 const auto last_word_type = words.back().type();
                 if (last_word_type.is_error())
                     return Error{2, "Invalid rule. Contains malformed word"};
-                if (last_word_type.result() != Word::Type::EXPAND && !custom_expand_func.has_value())
-                    return Error{3, "Invalid rule. Last word must be of type EXPAND, or a custom expand function must be provided"};
-                if (last_word_type.result() == Word::Type::EXPAND && custom_expand_func.has_value())
-                    return Error{4, "Invalid rule. Rule cannot have both a custom expand function and an EXPAND word"};
+                if (last_word_type.result() != Word::Type::EXPAND)
+                    return Error{3, "Invalid rule. Last word must be of type EXPAND"};
 
-                int no_custom_expand = !custom_expand_func.has_value();
-
-                const auto last_word_repeat = words[words.size() - 1 - no_custom_expand].repeat();
+                const auto last_word_repeat = words[words.size() - 1].repeat();
                 if (last_word_repeat.is_error())
                     return Error{2, "Invalid rule. Contains malformed word"};
                 if (last_word_repeat.result() != Word::RepeatType::ONCE)
@@ -788,13 +765,33 @@ namespace mgm {
             }
         };
 
+        struct Extension {
+            std::any user_data{};
+
+            Extension() = default;
+            Extension(const std::any& user_data) : user_data{user_data} {}
+
+            virtual Result<std::string> operator()(System& system, const std::unordered_map<std::string, std::vector<std::string>>& found_words)  = 0;
+
+            virtual ~Extension() = default;
+        };
+
         std::vector<Rule> rules{};
-        std::unordered_map<std::string, Extension> extensions{};
+        std::unordered_map<std::string, Extension*> extensions{};
+
+        template<typename T, std::enable_if_t<std::is_base_of_v<Extension, T>, bool> = true>
+        void add_extension(const std::string& name, T&& ext) {
+            extensions[name] = new T{std::forward<T>(ext)};
+        }
 
         System() {
-            extensions["EXPAND_COUNT"] = Extension{ size_t{}, [](System& system, Extension& extension, const std::unordered_map<std::string, std::vector<std::string>>& found_words) -> Result<std::string> {
-                return std::to_string(std::any_cast<size_t&>(extension.user_data)++);
-            }};
+            struct ExpandCountExtension : public Extension {
+                using Extension::Extension;
+                Result<std::string> operator()(System& system, const std::unordered_map<std::string, std::vector<std::string>>& found_words) override {
+                    return std::to_string(std::any_cast<size_t&>(user_data)++);
+                }
+            };
+            add_extension("EXPAND_COUNT", ExpandCountExtension{ size_t{} });
         }
         System(const System& other) = default;
         System(System&& other) = default;
@@ -802,7 +799,7 @@ namespace mgm {
         System& operator=(System&& other) = default;
 
         private:
-        Result<std::string> expand_generic(const std::string& str, std::unordered_map<std::string, std::vector<std::string>>& expand_vars) {
+        Result<std::string> expand_generic(const std::string& str, const std::unordered_map<std::string, std::vector<std::string>>& expand_vars) {
             const auto expr_to_expand = get_first_word(str, true);
             if (expr_to_expand.b - expr_to_expand.a == 0)
                 return Error{-1, "Expected expression after $"};
@@ -824,7 +821,7 @@ namespace mgm {
                         }
                         else if (is_alpha(str[word_to_expand.a])) {
                             words_in_expr.emplace_back(str.substr(word_to_expand.a, word_to_expand.b - word_to_expand.a), Rule::Word::Type::GENERIC);
-                            const auto& var = expand_vars[words_in_expr.back().a];
+                            const auto& var = expand_vars.at(words_in_expr.back().a);
                             max_iterations = std::min(max_iterations, var.size());
                         }
                         else
@@ -853,7 +850,7 @@ namespace mgm {
                                 break;
                             }
                             case Rule::Word::Type::GENERIC: {
-                                res += expand_vars[word.a][iteration];
+                                res += expand_vars.at(word.a)[iteration];
                                 break;
                             }
                             default: return Error{-1, "Unknown internal error"};
@@ -869,12 +866,12 @@ namespace mgm {
                 const auto var_name = str.substr(expr_to_expand.a, expr_to_expand.b - expr_to_expand.a);
                 const auto ext = extensions.find(var_name);
                 if (ext != extensions.end()) {
-                    const auto ext_result = ext->second.expand_func(*this, ext->second, expand_vars);
+                    const auto ext_result = (*ext->second)(*this, expand_vars);
                     if (ext_result.is_error())
                         return ext_result.error();
                     return ext_result.result();
                 }
-                const auto& expand_to = expand_vars[var_name];
+                const auto& expand_to = expand_vars.at(var_name);
                 if (expand_to.empty())
                     return Error{-1, "Variable not found"};
                 return expand_to.front();
@@ -935,35 +932,26 @@ namespace mgm {
                         if (found_rule->words[word.id].type().result() == Rule::Word::Type::GENERIC)
                             expand_vars[found_rule->words[word.id].word.substr(3)].emplace_back(str.source.substr(word.match.a, word.match.b - word.match.a));
 
-                    if (found_rule->custom_expand_func.has_value()) {
-                        const auto expand_result = found_rule->custom_expand_func.value()(*this, str, expand_vars);
-                        if (expand_result.is_error())
-                            errors.emplace_back(str.pos, expand_result.error().message);
-                        else
-                            res += expand_result.result();
-                    }
-                    else {
-                        auto expand = found_rule->words.back().word.substr(3);
-                        for (size_t j = 0; j < expand.size(); j++) {
-                            if (expand[j] == '$') {
-                                ++j;
-                                auto expand_expr = get_first_word(expand.substr(j), true);
-                                expand_expr = Pair{ expand_expr.a + j, expand_expr.b + j };
-                                const auto expand_result = expand_generic(expand.substr(expand_expr.a, expand_expr.b - expand_expr.a), expand_vars);
-                                if (expand_result.is_error()) {
-                                    errors.emplace_back(str.pos, expand_result.error().message);
-                                    break;
-                                }
-                                expand = expand.substr(0, j - 1) + expand_result.result() + expand.substr(expand_expr.b);
-                                j = j - 1 + expand_result.result().size();
+                    auto expand = found_rule->words.back().word.substr(3);
+                    for (size_t j = 0; j < expand.size(); j++) {
+                        if (expand[j] == '$') {
+                            ++j;
+                            auto expand_expr = get_first_word(expand.substr(j), true);
+                            expand_expr = Pair{ expand_expr.a + j, expand_expr.b + j };
+                            const auto expand_result = expand_generic(expand.substr(expand_expr.a, expand_expr.b - expand_expr.a), expand_vars);
+                            if (expand_result.is_error()) {
+                                errors.emplace_back(str.pos, expand_result.error().message);
+                                break;
                             }
+                            expand = expand.substr(0, j - 1) + expand_result.result() + expand.substr(expand_expr.b);
+                            j = j - 1 + expand_result.result().size();
                         }
-                        const auto parse_result = parse(expand);
-                        if (parse_result.is_error())
-                            errors.insert(errors.end(), parse_result.error().begin(), parse_result.error().end());
-                        else
-                            res += parse_result.result();
                     }
+                    const auto parse_result = parse(expand);
+                    if (parse_result.is_error())
+                        errors.insert(errors.end(), parse_result.error().begin(), parse_result.error().end());
+                    else
+                        res += parse_result.result();
                     const auto last_word_is_expand = found_rule->words.back().type().result() == Rule::Word::Type::EXPAND ? 2 : 1;
                     if (found_words[found_words.size() - last_word_is_expand].match.b > str.pos.pos)
                         str += found_words[found_words.size() - last_word_is_expand].match.b - str.pos.pos;
@@ -980,6 +968,11 @@ namespace mgm {
             if (!errors.empty())
                 return errors;
             return res;
+        }
+
+        ~System() {
+            for (auto& ext : extensions)
+                delete ext.second;
         }
     };
 }
