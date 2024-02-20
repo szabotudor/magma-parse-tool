@@ -1,6 +1,8 @@
 #pragma once
+#include <any>
 #include <cstddef>
 #include <functional>
+#include <iostream>
 #include <optional>
 #include <vector>
 #include <unordered_map>
@@ -341,8 +343,26 @@ namespace mgm {
             std::string message{};
             std::string fix{};
 
+            CompilationError() = default;
+
             CompilationError(const Source::SourcePos& pos, const std::string& message, Severity severity = Severity::ERROR, const std::string& fix = "")
             : pos{pos}, message{message}, severity{severity}, fix{fix} {}
+
+            CompilationError(const CompilationError& other) = default;
+            CompilationError(CompilationError&& other) = default;
+            CompilationError& operator=(const CompilationError& other) = default;
+            CompilationError& operator=(CompilationError&& other) = default;
+
+            ~CompilationError() = default;
+        };
+
+        struct Extension {
+            std::any user_data{};
+            std::function<Result<std::string>(System& system, Extension& extension, const std::unordered_map<std::string, std::vector<std::string>>& found_words)> expand_func{};
+
+            Extension() = default;
+
+            ~Extension() = default;
         };
 
         private:
@@ -363,7 +383,7 @@ namespace mgm {
         }
 
         static Pair<size_t, size_t> get_full_brace(const Source& str) {
-            Pair<size_t, size_t> res{};
+            Pair<size_t, size_t> res{str.pos.pos, str.pos.pos};
             const char beg = *str;
             char end{};
             switch (beg) {
@@ -428,8 +448,8 @@ namespace mgm {
                     switch (str[res.a]) {
                         case '(': case '[': case '{': case '<': {
                             if (full_brace) {
-                                const auto brace = get_full_brace(str + res.a);
-                                return {res.a, res.b + brace.b};
+                                const auto brace = get_full_brace(str + (res.a - str.pos.pos));
+                                return {res.a, brace.b};
                             }
                             return {res.a, res.b + 1};
                         }
@@ -467,7 +487,8 @@ namespace mgm {
                 };
                 enum class OptionalType {
                     MANDATORY,
-                    OPTIONAL
+                    OPTIONAL,
+                    OPTIONAL_LIST_MANDATORY_ONE
                 };
                 enum class RepeatType {
                     ONCE,
@@ -483,6 +504,7 @@ namespace mgm {
                     switch (word[0]) {
                         case ' ': return OptionalType::MANDATORY;
                         case '?': return OptionalType::OPTIONAL;
+                        case '^': return OptionalType::OPTIONAL_LIST_MANDATORY_ONE;
                         default: return Error{-1, "Invalid optional type"};
                     }
                 }
@@ -535,6 +557,7 @@ namespace mgm {
                     switch (optional) {
                         case OptionalType::MANDATORY: break;
                         case OptionalType::OPTIONAL: word[0] = '?'; break;
+                        case OptionalType::OPTIONAL_LIST_MANDATORY_ONE: word[0] = '^'; break;
                     }
                     switch (repeat) {
                         case RepeatType::ONCE: break;
@@ -550,22 +573,32 @@ namespace mgm {
                     }
                 }
             };
-            using CustomExpandFunc = std::function<Result<std::string, CompilationError>(System& system, const std::unordered_map<std::string, std::vector<std::string>>& found_words)>;
+            using CustomExpandFunc = std::function<Result<std::string, CompilationError>(System& system, Source& source, const std::unordered_map<std::string, std::vector<std::string>>& found_words)>;
 
             std::vector<Word> words{};
             std::optional<CustomExpandFunc> custom_expand_func{};
-            
+
+            size_t num_words() const {
+                return words.back().type().result() == Word::Type::EXPAND ? words.size() : words.size() - 1;
+            }
+
             Rule() = default;
 
             template<typename... Ts, std::enable_if_t<(std::is_constructible_v<Word, Ts> && ...), bool> = true>
             Rule(Ts&&... args) : words{Word{std::forward<Ts>(args)}...} {
-                if (is_valid().is_error())
+                const auto valid = is_valid();
+                if (is_valid().is_error()) {
                     words.clear();
+                    std::cerr << "Invalid rule: " << valid.error().message << std::endl;
+                }
             }
             template<typename... Ts, std::enable_if_t<(std::is_constructible_v<Word, Ts> && ...), bool> = true>
-            Rule(Ts&&... args, const CustomExpandFunc& custom_expand_func) : words{Word{std::forward<Ts>(args)}...}, custom_expand_func{custom_expand_func} {
-                if (is_valid().is_error())
+            Rule(const CustomExpandFunc& custom_expand_func, Ts&&... args) : words{Word{std::forward<Ts>(args)}...}, custom_expand_func{CustomExpandFunc{custom_expand_func}} {
+                const auto valid = is_valid();
+                if (is_valid().is_error()) {
                     words.clear();
+                    std::cerr << "Invalid rule: " << valid.error().message << std::endl;
+                }
             }
 
             Result<bool> is_valid() const {
@@ -580,11 +613,13 @@ namespace mgm {
                 if (last_word_type.result() == Word::Type::EXPAND && custom_expand_func.has_value())
                     return Error{4, "Invalid rule. Rule cannot have both a custom expand function and an EXPAND word"};
 
-                const auto last_word_repeat = words[words.size() - 2].repeat();
+                int no_custom_expand = !custom_expand_func.has_value();
+
+                const auto last_word_repeat = words[words.size() - 1 - no_custom_expand].repeat();
                 if (last_word_repeat.is_error())
                     return Error{2, "Invalid rule. Contains malformed word"};
                 if (last_word_repeat.result() != Word::RepeatType::ONCE)
-                    return Error{5, "Invalid rule. Last word must cannot be repeating"};
+                    return Error{5, "Invalid rule. Last word cannot be repeating"};
 
                 for (size_t i = 0; i < words.size(); i++) {
                     const auto& word = words[i];
@@ -616,16 +651,24 @@ namespace mgm {
                     case Word::Type::DIRECT: {
                         if (found_word_b_return) {
                             const auto first_word = get_first_word(str, true);
-                            *found_word_b_return += first_word.b;
+                            *found_word_b_return = first_word.b;
                         }
                         const auto word_desc = get_first_word(str, false);
                         if (word_desc.b - word_desc.a == 0)
                             return Error{-1, "Expected word"};
                         if (!(str + (word_desc.a - str.pos.pos)).matches(word.word.substr(3)))
                             return Error{-1, "Word does not match expected word"};
-                        return word_desc;
+                        return Pair{ word_desc.a, word_desc.a + word.word.size() - 3 };
                     }
                     case Word::Type::GENERIC: {
+                        if (word_id == num_words() - 1) {
+                            const auto first_word = get_first_word(str, true);
+                            if (first_word.b - first_word.a == 0)
+                                return Error{-1, "Expected word"};
+                            if (found_word_b_return)
+                                *found_word_b_return = first_word.b;
+                            return first_word;
+                        }
                         auto first_word = get_first_word(str, true);
                         auto str_cpy = str;
                         if (first_word.b - first_word.a == 0)
@@ -650,12 +693,12 @@ namespace mgm {
                         if (first_word.b < first_word.a)
                             return Error{-1, "Expected word"};
                         if (found_word_b_return)
-                            *found_word_b_return += i;
+                            *found_word_b_return = i;
                         return first_word;
                     }
                     case Word::Type::EXPAND: {
                         if (found_word_b_return)
-                            *found_word_b_return += (size_t)str.size();
+                            *found_word_b_return = (size_t)str.size();
                         size_t i = 0;
                         while (is_whitespace(str[i])) ++i;
                         return Pair{ i, i };
@@ -719,10 +762,21 @@ namespace mgm {
                             ++i;
                             continue;
                         }
+                        if (words[i].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE) {
+                            if (words[i + 1].optional().result() != Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE)
+                                return CompilationError{(str + pos).pos, "Word should match at least one option in optional list", CompilationError::Severity::ERROR};
+                            while (words[i].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE)
+                                ++i;
+                            continue;
+                        }
                         return CompilationError{(str + pos).pos, std::string{"Word \""} + words[i].word.substr(3) + "\" not found", CompilationError::Severity::ERROR};
                     }
                     pos = word_match.result().b;
                     res.emplace_back(WordMatch{ i, word_match.result() });
+
+                    if (words[i].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE)
+                        while (words[i + 1].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE)
+                            ++i;
 
                     switch (words[i].repeat().result()) {
                         case Word::RepeatType::ONCE: ++i; repeating = false; break;
@@ -735,17 +789,20 @@ namespace mgm {
         };
 
         std::vector<Rule> rules{};
+        std::unordered_map<std::string, Extension> extensions{};
 
-        std::unordered_map<std::string, size_t> instr_map{};
-
-        System() = default;
+        System() {
+            extensions["EXPAND_COUNT"] = Extension{ size_t{}, [](System& system, Extension& extension, const std::unordered_map<std::string, std::vector<std::string>>& found_words) -> Result<std::string> {
+                return std::to_string(std::any_cast<size_t&>(extension.user_data)++);
+            }};
+        }
         System(const System& other) = default;
         System(System&& other) = default;
         System& operator=(const System& other) = default;
         System& operator=(System&& other) = default;
 
         private:
-        static Result<std::string> expand_generic(const std::string& str, std::unordered_map<std::string, std::vector<std::string>>& expand_vars) {
+        Result<std::string> expand_generic(const std::string& str, std::unordered_map<std::string, std::vector<std::string>>& expand_vars) {
             const auto expr_to_expand = get_first_word(str, true);
             if (expr_to_expand.b - expr_to_expand.a == 0)
                 return Error{-1, "Expected expression after $"};
@@ -810,7 +867,14 @@ namespace mgm {
 
             if (is_alpha(str[expr_to_expand.a])) {
                 const auto var_name = str.substr(expr_to_expand.a, expr_to_expand.b - expr_to_expand.a);
-                const auto expand_to = expand_vars[var_name];
+                const auto ext = extensions.find(var_name);
+                if (ext != extensions.end()) {
+                    const auto ext_result = ext->second.expand_func(*this, ext->second, expand_vars);
+                    if (ext_result.is_error())
+                        return ext_result.error();
+                    return ext_result.result();
+                }
+                const auto& expand_to = expand_vars[var_name];
                 if (expand_to.empty())
                     return Error{-1, "Variable not found"};
                 return expand_to.front();
@@ -822,7 +886,7 @@ namespace mgm {
         public:
         Result<std::string, std::vector<CompilationError>> parse(Source str) {
             std::string res{};
-            std::vector <CompilationError> errors{};
+            std::vector<CompilationError> errors{};
 
             for (; !str.reached_end(); ++str) {
                 while (is_whitespace(*str)) ++str;
@@ -839,10 +903,12 @@ namespace mgm {
                 std::vector<Rule::WordMatch> found_words{};
                 float best_match_score = 0.0f;
 
+                size_t num_errs_found = 0;
                 for (const auto& rule : rules) {
                     const auto _found_words = rule.match(str);
                     if (_found_words.is_error()) {
                         errors.emplace_back(_found_words.error().pos, _found_words.error().message);
+                        ++num_errs_found;
                         continue;
                     }
                     if (_found_words.result().size() > 0) {
@@ -862,13 +928,15 @@ namespace mgm {
                 }
 
                 if (best_match_score >= 1.0f) {
+                    if (num_errs_found > 0)
+                        errors.resize(errors.size() - num_errs_found);
                     std::unordered_map<std::string, std::vector<std::string>> expand_vars{};
                     for (const auto& word : found_words)
                         if (found_rule->words[word.id].type().result() == Rule::Word::Type::GENERIC)
                             expand_vars[found_rule->words[word.id].word.substr(3)].emplace_back(str.source.substr(word.match.a, word.match.b - word.match.a));
-                    
+
                     if (found_rule->custom_expand_func.has_value()) {
-                        const auto expand_result = found_rule->custom_expand_func.value()(*this, expand_vars);
+                        const auto expand_result = found_rule->custom_expand_func.value()(*this, str, expand_vars);
                         if (expand_result.is_error())
                             errors.emplace_back(str.pos, expand_result.error().message);
                         else
