@@ -1,0 +1,73 @@
+---
+BraceWrapping:
+  AfterCaseLabel: false
+  IndentBraces: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeWhile: true
+  BeforeLambdaBody: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+UseTab: Never
+TabWidth: 4
+Standard: c++17
+IndentWidth: 4
+IndentAccessModifiers: false
+IndentCaseBlocks: false
+IndentCaseLabels: true
+NamespaceIndentation: All
+SpaceBeforeParensOptions:
+  BeforeNonEmptyParentheses: true
+  AfterControlStatements: true
+  AfterForeachMacros: true
+  AfterFunctionDeclarationName: true
+  AfterFunctionDefinitionName: true
+  AfterIfMacros: true
+  AfterOverloadedOperator: true
+  AfterRequiresInClause: true
+  AfterRequiresInExpression: true
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock: false
+SpacesInAngles: Never
+SpacesInLineCommentPrefix:
+  Minimum: 1
+  Maximum: 1
+SpaceBeforeParens: ControlStatements
+ReferenceAlignment: Left
+PointerAlignment: Left
+SortIncludes: CaseInsensitive
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: {}
+AlignArrayOfStructures: Left
+AlignEscapedNewlines: Left
+AllowShortEnumsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLambdasOnASingleLine: None
+AllowShortLoopsOnASingleLine: true
+AlwaysBreakTemplateDeclarations: MultiLine
+BreakBeforeBraces: Custom
+Language: Cpp
+LineEnding: LF
+QualifierAlignment: Left
+RemoveSemicolon: true
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeRangeBasedForLoopColon: true
+IndentGotoLabels: false
+LambdaBodyIndentation: OuterScope
+ColumnLimit: 128
