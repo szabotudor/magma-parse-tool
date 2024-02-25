@@ -71,3 +71,4 @@ SpaceBeforeRangeBasedForLoopColon: true
 IndentGotoLabels: false
 LambdaBodyIndentation: OuterScope
 ColumnLimit: 128
+MaxEmptyLinesToKeep: 2
