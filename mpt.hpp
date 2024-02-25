@@ -1,5 +1,4 @@
 #pragma once
-#include <any>
 #include <cstddef>
 #include <cstring>
 #include <functional>
@@ -8,145 +7,8 @@
 #include <unordered_map>
 #include <vector>
 
+
 namespace mgm {
-    struct Error {
-        int64_t code{};
-        std::string message{};
-    };
-    template<typename T, typename E = Error> struct Result {
-        union _Result {
-            T value;
-            E error;
-            _Result() {}
-            ~_Result() {}
-        } _result{};
-        bool _is_error = false;
-
-        bool is_error() const { return _is_error; }
-
-        template<std::enable_if_t<!std::is_same_v<T, E>, bool> = true> Result(T&& value) : _is_error{false} {
-            new (&_result.value) T{std::move(value)};
-        }
-        template<std::enable_if_t<!std::is_same_v<T, E>, bool> = true> Result(const T& value) : _is_error{false} {
-            new (&_result.value) T{value};
-        }
-        template<std::enable_if_t<!std::is_same_v<T, E>, bool> = true> Result(const E& error) : _is_error{true} {
-            new (&_result.error) E{error};
-        }
-
-      private:
-        void copy(const Result& res) {
-            if (_is_error)
-                new (&_result.error) E{res._result.error};
-            else
-                new (&_result.value) T{res._result.value};
-        }
-        void move(Result& res) {
-            if (_is_error)
-                new (&_result.error) E{std::move(res._result.error)};
-            else
-                new (&_result.value) T{std::move(res._result.value)};
-        }
-
-      public:
-        Result(const Result& res) : _is_error{res._is_error} { copy(res); }
-        Result(Result&& res) : _is_error{res._is_error} { move(res); }
-        Result& operator=(const Result& res) {
-            if (this == &res) return *this;
-            this->~Result();
-            _is_error = res._is_error;
-            copy(res);
-            return *this;
-        }
-        Result& operator=(Result&& res) {
-            if (this == &res) return *this;
-            this->~Result();
-            _is_error = res._is_error;
-            move(res);
-            return *this;
-        }
-
-        static Result from_error(const E& error) {
-            Result res{};
-            res._is_error = true;
-            new (&res._result.error) E{error};
-            return res;
-        }
-        static Result from_value(T&& value) {
-            Result res{};
-            res._is_error = false;
-            new (&res._result.value) T{std::move(value)};
-            return res;
-        }
-        static Result from_value(const T& value) {
-            Result res{};
-            res._is_error = false;
-            new (&res._result.value) T{value};
-            return res;
-        }
-
-        Result() {}
-
-        T& result() {
-#ifdef ALLOW_THROW
-            if (is_error()) throw std::runtime_error{_result.error.message.data()};
-#endif
-            return _result.value;
-        }
-        const T& result() const {
-#ifdef ALLOW_THROW
-            if (is_error()) throw std::runtime_error{"Result is error"};
-#endif
-            return _result.value;
-        }
-        const E& error() const { return _result.error; }
-
-        ~Result() {
-            if (is_error())
-                _result.error.~E();
-            else
-                _result.value.~T();
-        }
-    };
-    template<typename T, typename U> struct Pair {
-        T a;
-        U b;
-
-        Pair() : a{}, b{} {};
-
-        Pair(const T& a, const U& b) : a{a}, b{b} {}
-        Pair(T&& a, U&& b) : a{std::move(a)}, b{std::move(b)} {}
-
-        Pair(const Pair<T, U>& p) : a{p.a}, b{p.b} {}
-        Pair(Pair<T, U>&& p) : a{std::move(p.a)}, b{std::move(p.b)} {}
-        Pair<T, U>& operator=(const Pair<T, U>& p) {
-            if (this == &p) return *this;
-            a = p.a;
-            b = p.b;
-            return *this;
-        }
-        Pair<T, U>& operator=(Pair<T, U>&& p) {
-            if (this == &p) return *this;
-            a = std::move(p.a);
-            b = std::move(p.b);
-            return *this;
-        }
-
-        template<typename... Ts, std::enable_if_t<std::is_constructible_v<T, Ts...>, bool> = true> void emplace_a(Ts&&... ts) {
-            a.~T();
-            new (&a) T{std::forward(ts)...};
-        }
-        template<typename... Us, std::enable_if_t<std::is_constructible_v<U, Us...>, bool> = true> void emplace_b(Us&&... ts) {
-            b.~U();
-            new (&b) U{std::forward(ts)...};
-        }
-
-        bool operator==(const Pair<T, U>& p) const { return a == p.a && b == p.b; }
-        bool operator!=(const Pair<T, U>& p) const { return !(*this == p); }
-
-        ~Pair() = default;
-    };
-
     class System {
       public:
         struct Source {
@@ -301,6 +163,10 @@ namespace mgm {
                 return true;
             }
         };
+        struct Error {
+            int64_t code{};
+            std::string message{};
+        };
         struct CompilationError {
             enum class Severity { MESSAGE, WARNING, ERROR, SYSTEM_ERROR } severity{};
             Source::SourcePos pos{};
@@ -321,6 +187,103 @@ namespace mgm {
 
             ~CompilationError() = default;
         };
+        template<typename T, typename E = Error> struct Result {
+            union _Result {
+                T value;
+                E error;
+                _Result() {}
+                ~_Result() {}
+            } _result{};
+            bool _is_error = false;
+
+            bool is_error() const { return _is_error; }
+
+            template<std::enable_if_t<!std::is_same_v<T, E>, bool> = true> Result(T&& value) : _is_error{false} {
+                new (&_result.value) T{std::move(value)};
+            }
+            template<std::enable_if_t<!std::is_same_v<T, E>, bool> = true> Result(const T& value) : _is_error{false} {
+                new (&_result.value) T{value};
+            }
+            template<std::enable_if_t<!std::is_same_v<T, E>, bool> = true> Result(const E& error) : _is_error{true} {
+                new (&_result.error) E{error};
+            }
+
+          private:
+            void copy(const Result& res) {
+                if (_is_error)
+                    new (&_result.error) E{res._result.error};
+                else
+                    new (&_result.value) T{res._result.value};
+            }
+            void move(Result& res) {
+                if (_is_error)
+                    new (&_result.error) E{std::move(res._result.error)};
+                else
+                    new (&_result.value) T{std::move(res._result.value)};
+            }
+
+          public:
+            Result(const Result& res) : _is_error{res._is_error} { copy(res); }
+            Result(Result&& res) : _is_error{res._is_error} { move(res); }
+            Result& operator=(const Result& res) {
+                if (this == &res) return *this;
+                this->~Result();
+                _is_error = res._is_error;
+                copy(res);
+                return *this;
+            }
+            Result& operator=(Result&& res) {
+                if (this == &res) return *this;
+                this->~Result();
+                _is_error = res._is_error;
+                move(res);
+                return *this;
+            }
+
+            static Result from_error(const E& error) {
+                Result res{};
+                res._is_error = true;
+                new (&res._result.error) E{error};
+                return res;
+            }
+            static Result from_value(T&& value) {
+                Result res{};
+                res._is_error = false;
+                new (&res._result.value) T{std::move(value)};
+                return res;
+            }
+            static Result from_value(const T& value) {
+                Result res{};
+                res._is_error = false;
+                new (&res._result.value) T{value};
+                return res;
+            }
+
+            Result() {}
+
+            T& result() {
+#ifdef ALLOW_THROW
+                if (is_error()) throw std::runtime_error{_result.error.message.data()};
+#endif
+                return _result.value;
+            }
+            const T& result() const {
+#ifdef ALLOW_THROW
+                if (is_error()) throw std::runtime_error{"Result is error"};
+#endif
+                return _result.value;
+            }
+            const E& error() const { return _result.error; }
+
+            ~Result() {
+                if (is_error())
+                    _result.error.~E();
+                else
+                    _result.value.~T();
+            }
+        };
+
+        using GenericValueMap = std::unordered_map<std::string, std::vector<std::string>>;
 
       private:
         static bool is_whitespace(const char c) { return c == ' ' || c == '\n' || c == '\t'; }
@@ -330,8 +293,8 @@ namespace mgm {
             return c >= '!' && c <= '/' || c >= ':' && c <= '@' || c >= '[' && c <= '`' || c >= '{' && c <= '~';
         }
 
-        static Pair<size_t, size_t> get_full_brace(const Source& str) {
-            Pair<size_t, size_t> res{str.pos.pos, str.pos.pos};
+        static std::pair<size_t, size_t> get_full_brace(const Source& str) {
+            std::pair<size_t, size_t> res{str.pos.pos, str.pos.pos};
             const char beg = *str;
             char end{};
             switch (beg) {
@@ -352,31 +315,31 @@ namespace mgm {
             }
             int st = 1;
 
-            while (res.b < str.size() && st >= 1) {
-                ++res.b;
-                if (str[res.b] == beg) ++st;
-                if (str[res.b] == end) --st;
+            while (res.second < str.size() && st >= 1) {
+                ++res.second;
+                if (str[res.second] == beg) ++st;
+                if (str[res.second] == end) --st;
             }
-            if (str[res.b] == end) ++res.b;
+            if (str[res.second] == end) ++res.second;
             return res;
         }
-        static Pair<size_t, size_t> get_first_word(const Source& str, bool full_brace) {
+        static std::pair<size_t, size_t> get_first_word(const Source& str, bool full_brace) {
             if (str.empty()) return {};
-            Pair<size_t, size_t> res{str.pos.pos, str.pos.pos};
+            std::pair<size_t, size_t> res{str.pos.pos, str.pos.pos};
             enum _Mode { WHITESPACE, NUM, ALPHA, SYM } mode = WHITESPACE;
 
-            while (str[res.a] != '\0') {
-                if (!is_whitespace(str[res.a])) {
-                    if (is_num(str[res.a]))
+            while (str[res.first] != '\0') {
+                if (!is_whitespace(str[res.first])) {
+                    if (is_num(str[res.first]))
                         mode = NUM;
-                    else if (is_alpha(str[res.a]))
+                    else if (is_alpha(str[res.first]))
                         mode = ALPHA;
-                    else if (is_sym(str[res.a]))
+                    else if (is_sym(str[res.first]))
                         mode = SYM;
                     break;
                 }
-                ++res.a;
-                ++res.b;
+                ++res.first;
+                ++res.second;
             }
 
             switch (mode) {
@@ -385,49 +348,55 @@ namespace mgm {
                     return {};
                 }
                 case NUM: {
-                    while (is_num(str[res.b]) || str[res.b] == '.' || str[res.b] == 'u' || str[res.b] == 'i' ||
-                           str[res.b] == 'f')
-                        ++res.b;
+                    while ((is_num(str[res.second]) || str[res.second] == '.' || str[res.second] == 'u' ||
+                            str[res.second] == 'i' || str[res.second] == 'f') &&
+                           str[res.second] != '\0')
+                        ++res.second;
                     return res;
                     break;
                 }
                 case ALPHA: {
-                    while (is_alpha(str[res.b]) || is_num(str[res.b]) || str[res.b] == '_') ++res.b;
+                    while ((is_alpha(str[res.second]) || is_num(str[res.second]) || str[res.second] == '_') &&
+                           str[res.second] != '\0')
+                        ++res.second;
                     return res;
                     break;
                 }
                 case SYM: {
-                    switch (str[res.a]) {
+                    switch (str[res.first]) {
                         case '(':
                         case '[':
                         case '{':
                         case '<': {
                             if (full_brace) {
-                                const auto brace = get_full_brace(str + (res.a - str.pos.pos));
-                                return {res.a, brace.b};
+                                const auto brace = get_full_brace(str + (res.first - str.pos.pos));
+                                return {res.first, brace.second};
                             }
-                            return {res.a, res.b + 1};
+                            return {res.first, res.second + 1};
                         }
                         case '+':
                         case '-':
                         case '*':
-                        case '/':
                         case '&':
                         case '|':
+                        case '=':
+                            if (str[res.first + 1] == str[res.first]) return {res.first, res.second + 2};
+                        case '/':
                         case '^':
                         case '%': {
-                            if (str[res.a + 1] == '=') return {res.a, res.b + 2};
-                            return {res.a, res.b + 1};
+                            if (str[res.first + 1] == '=') return {res.first, res.second + 2};
+                            return {res.first, res.second + 1};
                         }
                         case '"': {
-                            ++res.b;
-                            while ((str[res.b] != '"' || (str[res.b] == '"' && str[res.b - 1] == '\\')) && str[res.b] != '\0')
-                                ++res.b;
-                            if (str[res.b] == '"') ++res.b;
+                            ++res.second;
+                            while ((str[res.second] != '"' || (str[res.second] == '"' && str[res.second - 1] == '\\')) &&
+                                   str[res.second] != '\0')
+                                ++res.second;
+                            if (str[res.second] == '"') ++res.second;
                             return res;
                         }
                         default: {
-                            return {res.a, res.b + 1};
+                            return {res.first, res.second + 1};
                         }
                     }
                     break;
@@ -549,14 +518,10 @@ namespace mgm {
                     }
                 }
             };
-            using CustomExpandFunc = std::function<Result<std::string, CompilationError>(
-                System& system, Source& source, const std::unordered_map<std::string, std::vector<std::string>>& found_words)>;
 
             std::vector<Word> words{};
 
-            size_t num_words() const {
-                return words.back().type().result() == Word::Type::EXPAND ? words.size() - 1 : words.size();
-            }
+            size_t num_words() const { return words.size() - 1; }
 
             Rule() = default;
 
@@ -602,41 +567,41 @@ namespace mgm {
 
             struct WordMatch {
                 size_t id{};
-                Pair<size_t, size_t> match{};
+                std::pair<size_t, size_t> match{};
             };
 
           private:
-            Result<Pair<size_t, size_t>> ensure_word_match(const Source& str, const size_t word_id,
-                                                           size_t* found_word_b_return = nullptr) const {
+            Result<std::pair<size_t, size_t>> ensure_word_match(const Source& str, const size_t word_id,
+                                                                size_t* found_word_b_return = nullptr) const {
                 const auto& word = words[word_id];
                 const auto type = word.type().result();
                 switch (type) {
                     case Word::Type::DIRECT: {
                         if (found_word_b_return) {
                             const auto first_word = get_first_word(str, true);
-                            *found_word_b_return = first_word.b;
+                            *found_word_b_return = first_word.second;
                         }
                         const auto word_desc = get_first_word(str, false);
-                        if (word_desc.b - word_desc.a == 0) return Error{-1, "Expected word"};
-                        if (!(str + (word_desc.a - str.pos.pos)).matches(word.word.substr(3)))
+                        if (word_desc.second - word_desc.first == 0) return Error{-1, "Expected word"};
+                        if (!(str + (word_desc.first - str.pos.pos)).matches(word.word.substr(3)))
                             return Error{-1, "Word does not match expected word"};
-                        return Pair{word_desc.a, word_desc.a + word.word.size() - 3};
+                        return std::pair{word_desc.first, word_desc.first + word.word.size() - 3};
                     }
                     case Word::Type::GENERIC: {
                         if (word_id == num_words() - 1) {
                             const auto first_word = get_first_word(str, true);
-                            if (first_word.b - first_word.a == 0) return Error{-1, "Expected word"};
-                            if (found_word_b_return) *found_word_b_return = first_word.b;
+                            if (first_word.second - first_word.first == 0) return Error{-1, "Expected word"};
+                            if (found_word_b_return) *found_word_b_return = first_word.second;
                             return first_word;
                         }
                         auto first_word = get_first_word(str, true);
                         auto str_cpy = str;
-                        if (first_word.b - first_word.a == 0) return Error{-1, "Expected word"};
-                        size_t i = first_word.b;
+                        if (first_word.second - first_word.first == 0) return Error{-1, "Expected word"};
+                        size_t i = first_word.second;
                         size_t next_word_id = word_id + 1;
                         size_t backup_word = next_word_id;
                         while (words[backup_word].repeat().result() == Word::RepeatType::REPEAT) ++backup_word;
-                        Result<Pair<size_t, size_t>> next_word_match = Error{};
+                        System::Result<std::pair<size_t, size_t>> next_word_match = Error{};
                         do {
                             const size_t _i = i;
                             str_cpy += i - str_cpy.pos.pos;
@@ -647,11 +612,11 @@ namespace mgm {
                                 return Error{-1, "Reached end of string without finding next word"};
                         }
                         while (next_word_match.is_error());
-                        i = next_word_match.result().a;
+                        i = next_word_match.result().first;
                         if (i > 0)
                             while (is_whitespace(str[i - 1])) --i;
-                        first_word.b = i;
-                        if (first_word.b < first_word.a) return Error{-1, "Expected word"};
+                        first_word.second = i;
+                        if (first_word.second < first_word.first) return Error{-1, "Expected word"};
                         if (found_word_b_return) *found_word_b_return = i;
                         return first_word;
                     }
@@ -659,7 +624,7 @@ namespace mgm {
                         if (found_word_b_return) *found_word_b_return = (size_t)str.size();
                         size_t i = 0;
                         while (is_whitespace(str[i])) ++i;
-                        return Pair{i, i};
+                        return std::pair{i, i};
                     }
                     default: {
                         return Error{-1, "Word is not matchable"};
@@ -731,7 +696,7 @@ namespace mgm {
                                                 std::string{"Word \""} + words[i].word.substr(3) + "\" not found",
                                                 CompilationError::Severity::ERROR};
                     }
-                    pos = word_match.result().b;
+                    pos = word_match.result().second;
                     res.emplace_back(WordMatch{i, word_match.result()});
 
                     if (words[i].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE)
@@ -756,72 +721,155 @@ namespace mgm {
         };
 
         struct Extension {
-            std::any user_data{};
-
             Extension() = default;
-            Extension(const std::any& user_data) : user_data{user_data} {}
 
-            virtual Result<std::string>
-            operator()(System& system, const std::unordered_map<std::string, std::vector<std::string>>& found_words) = 0;
+            virtual Result<std::string> operator()(System& system, const GenericValueMap& found_words,
+                                                   const std::string& params = "") = 0;
+
+            virtual void clone(Extension* into) const {}
 
             virtual ~Extension() = default;
         };
 
+      private:
+        struct ExtensionContainer {
+          private:
+            Extension* extension{};
+            std::function<Extension*(Extension* original)> clone_func{};
+
+          public:
+            ExtensionContainer() = default;
+            ExtensionContainer(const ExtensionContainer& other)
+                : extension{other.clone_func(other.extension)}, clone_func{other.clone_func} {}
+            ExtensionContainer(ExtensionContainer&& other) : extension{other.extension}, clone_func{other.clone_func} {
+                other.extension = nullptr;
+                other.clone_func = nullptr;
+            }
+            ExtensionContainer& operator=(const ExtensionContainer& other) {
+                if (this == &other) return *this;
+                delete extension;
+                extension = other.clone_func(other.extension);
+                clone_func = other.clone_func;
+                return *this;
+            }
+            ExtensionContainer& operator=(ExtensionContainer&& other) {
+                if (this == &other) return *this;
+                delete extension;
+                extension = other.extension;
+                clone_func = other.clone_func;
+                other.extension = nullptr;
+                other.clone_func = nullptr;
+                return *this;
+            }
+
+            template<typename T, typename... Ts,
+                     std::enable_if_t<std::is_base_of_v<Extension, T> && std::is_constructible_v<T, Ts...>, bool> = true>
+            ExtensionContainer& construct(Ts&&... args) {
+                delete extension;
+                extension = new T{std::forward<Ts>(args)...};
+                clone_func = [](Extension* original) {
+                    return new T{*dynamic_cast<T*>(original)};
+                };
+                return *this;
+            }
+
+            Result<std::string> operator()(System& system, const GenericValueMap& found_words, const std::string& params = "") {
+                if (!extension) return Error{-1, "Extension is empty"};
+                return (*extension)(system, found_words, params);
+            }
+
+            template<typename T> T& get() { return *dynamic_cast<T*>(extension); }
+            template<typename T> const T& get() const { return *dynamic_cast<T*>(extension); }
+
+            ~ExtensionContainer() { delete extension; }
+        };
+
+      public:
         std::vector<Rule> rules{};
-        std::unordered_map<std::string, Extension*> extensions{};
+        std::unordered_map<std::string, ExtensionContainer> extensions{};
 
-        template<typename T, std::enable_if_t<std::is_base_of_v<Extension, T>, bool> = true>
-        void add_extension(const std::string& name, T&& ext) {
-            extensions[name] = new T{std::forward<T>(ext)};
+        template<typename T, typename... Ts,
+                 std::enable_if_t<std::is_base_of_v<Extension, T> && std::is_constructible_v<T, Ts...>, bool> = true>
+        void add_extension(const std::string& name, Ts&&... args) {
+            extensions[name].construct<T>(std::forward<T>(args)...);
         }
 
-        System() {
-            struct ExpandCountExtension : public Extension {
-                using Extension::Extension;
-                Result<std::string>
-                operator()(System& system,
-                           const std::unordered_map<std::string, std::vector<std::string>>& found_words) override {
-                    return std::to_string(std::any_cast<size_t&>(user_data)++);
+      private:
+        struct ExpandCountExtension : public Extension {
+            using Extension::Extension;
+            size_t count{};
+            System::Result<std::string> operator()(System& system, const System::GenericValueMap& found_words,
+                                                   const std::string& params) override {
+                return std::to_string(count++);
+            }
+        };
+        struct SimpleCalcExtension : public Extension {
+            using Extension::Extension;
+            Result<std::string> operator()(System& system, const System::GenericValueMap& found_words,
+                                           const std::string& params) override {
+                if (params.empty()) return Error{-1, "No expression to calculate"};
+                static thread_local Rule rule{" *$val", "^* +", "^* -", "^* *", "^* /", "^* %", "   END", "  + "};
+                const auto match = rule.match(params + " END");
+                if (match.is_error()) return Error{-1, match.error().message};
+
+                for (const auto& w : match.result()) {
+                    const auto word = params.substr(w.match.first, w.match.second - w.match.first);
+                    const auto type = rule.words[w.id].type().result();
+                    switch (type) {
+                        case Rule::Word::Type::GENERIC: {
+                        }
+                        default:
+                            return Error{-1, "Invalid word type"};
+                    }
                 }
-            };
-            add_extension("EXPAND_COUNT", ExpandCountExtension{size_t{}});
+                return std::string{};
+            }
+        };
+
+      public:
+        void enable_default_extensions() {
+            extensions.clear();
+            add_extension<ExpandCountExtension>("EXPAND_COUNT", ExpandCountExtension{});
+            add_extension<SimpleCalcExtension>("CALC", SimpleCalcExtension{});
         }
+        System(const std::vector<Rule>& rules = {}, const std::unordered_map<std::string, ExtensionContainer>& extensions = {})
+            : rules{rules}, extensions{extensions} {}
         System(const System& other) = default;
         System(System&& other) = default;
         System& operator=(const System& other) = default;
         System& operator=(System&& other) = default;
 
       private:
-        Result<std::string> expand_generic(const std::string& str,
-                                           const std::unordered_map<std::string, std::vector<std::string>>& expand_vars) {
+        Result<std::string> expand_generic(const std::string& str, const GenericValueMap& expand_vars) {
             const auto expr_to_expand = get_first_word(str, true);
-            if (expr_to_expand.b - expr_to_expand.a == 0) return Error{-1, "Expected expression after $"};
+            if (expr_to_expand.second - expr_to_expand.first == 0) return Error{-1, "Expected expression after $"};
 
-            if (str[expr_to_expand.a] == '(') {
-                std::vector<Pair<std::string, Rule::Word::Type>> words_in_expr{};
-                std::vector<Pair<size_t, size_t>> exprs_to_expand{};
+            if (str[expr_to_expand.first] == '(') {
+                std::vector<std::pair<std::string, Rule::Word::Type>> words_in_expr{};
+                std::vector<std::pair<size_t, size_t>> exprs_to_expand{};
                 size_t max_iterations = (size_t)-1;
-                for (size_t i = expr_to_expand.a + 1; i < expr_to_expand.b - 1; i++) {
+                for (size_t i = expr_to_expand.first + 1; i < expr_to_expand.second - 1; i++) {
                     if (str[i] == '$') {
                         ++i;
                         auto word_to_expand = get_first_word(str.substr(i), true);
-                        word_to_expand = Pair{word_to_expand.a + i, word_to_expand.b + i};
-                        if (str[word_to_expand.a] == '(') {
-                            const auto expand_result =
-                                expand_generic(str.substr(word_to_expand.a, word_to_expand.b - word_to_expand.a), expand_vars);
+                        word_to_expand = std::pair{word_to_expand.first + i, word_to_expand.second + i};
+                        if (str[word_to_expand.first] == '(') {
+                            const auto expand_result = expand_generic(
+                                str.substr(word_to_expand.first, word_to_expand.second - word_to_expand.first), expand_vars);
                             if (expand_result.is_error()) return expand_result.error();
                             words_in_expr.emplace_back(expand_result.result(), Rule::Word::Type::DIRECT);
                         }
-                        else if (is_alpha(str[word_to_expand.a])) {
-                            words_in_expr.emplace_back(str.substr(word_to_expand.a, word_to_expand.b - word_to_expand.a),
-                                                       Rule::Word::Type::GENERIC);
-                            const auto& var = expand_vars.at(words_in_expr.back().a);
+                        else if (is_alpha(str[word_to_expand.first])) {
+                            words_in_expr.emplace_back(
+                                str.substr(word_to_expand.first, word_to_expand.second - word_to_expand.first),
+                                Rule::Word::Type::GENERIC);
+                            const auto& var = expand_vars.at(words_in_expr.back().first);
                             max_iterations = std::min(max_iterations, var.size());
                         }
                         else
                             return Error{-1, "Invalid expression after $"};
-                        exprs_to_expand.emplace_back(word_to_expand.a - 1, word_to_expand.b);
-                        i = word_to_expand.b - 1;
+                        exprs_to_expand.emplace_back(word_to_expand.first - 1, word_to_expand.second);
+                        i = word_to_expand.second - 1;
                     }
                 }
 
@@ -832,41 +880,52 @@ namespace mgm {
                 size_t current_word = 0;
                 for (size_t iteration = 0; iteration < max_iterations; iteration++) {
                     for (size_t i = 0; i < words_in_expr.size(); i++) {
-                        if (exprs_to_expand[i].a > last_word_end)
-                            res += str.substr(last_word_end, exprs_to_expand[i].a - last_word_end);
-                        last_word_end = exprs_to_expand[i].b;
+                        if (exprs_to_expand[i].first > last_word_end)
+                            res += str.substr(last_word_end, exprs_to_expand[i].first - last_word_end);
+                        last_word_end = exprs_to_expand[i].second;
 
                         const auto& word = words_in_expr[i];
-                        switch (word.b) {
+                        switch (word.second) {
                             case Rule::Word::Type::DIRECT: {
-                                res += word.a;
+                                res += word.first;
                                 break;
                             }
                             case Rule::Word::Type::GENERIC: {
-                                res += expand_vars.at(word.a)[iteration];
+                                res += expand_vars.at(word.first)[iteration];
                                 break;
                             }
                             default:
                                 return Error{-1, "Unknown internal error"};
                         }
                     }
-                    if (exprs_to_expand.back().b < expr_to_expand.b - 1)
-                        res += str.substr(exprs_to_expand.back().b, expr_to_expand.b - exprs_to_expand.back().b - 1);
+                    if (exprs_to_expand.back().second < expr_to_expand.second - 1)
+                        res += str.substr(exprs_to_expand.back().second,
+                                          expr_to_expand.second - exprs_to_expand.back().second - 1);
                 }
                 return res;
             }
 
-            if (is_alpha(str[expr_to_expand.a])) {
-                const auto var_name = str.substr(expr_to_expand.a, expr_to_expand.b - expr_to_expand.a);
+            if (is_alpha(str[expr_to_expand.first])) {
+                const auto var_name = str.substr(expr_to_expand.first, expr_to_expand.second - expr_to_expand.first);
                 const auto ext = extensions.find(var_name);
                 if (ext != extensions.end()) {
-                    const auto ext_result = (*ext->second)(*this, expand_vars);
+                    auto params_expr = get_first_word(str.substr(expr_to_expand.second), true);
+                    params_expr =
+                        std::pair{params_expr.first + expr_to_expand.second, params_expr.second + expr_to_expand.second};
+                    if (str[params_expr.first] == '(') {
+                        const auto ext_result =
+                            ext->second(*this, expand_vars, str.substr(params_expr.first + 1, params_expr.second - 1));
+                        if (ext_result.is_error()) return ext_result.error();
+                        return ext_result.result();
+                    }
+                    const auto ext_result = ext->second(*this, expand_vars, "");
                     if (ext_result.is_error()) return ext_result.error();
                     return ext_result.result();
                 }
-                const auto& expand_to = expand_vars.at(var_name);
-                if (expand_to.empty()) return Error{-1, "Variable not found"};
-                return expand_to.front();
+                const auto& expand_to = expand_vars.find(var_name);
+                if (expand_to == expand_vars.end()) return Error{-1, "Variable not found"};
+                if (expand_to->second.empty()) return Error{-1, "Variable not found"};
+                return expand_to->second.front();
             }
 
             return Error{-1, "Invalid expression after $"};
@@ -882,8 +941,8 @@ namespace mgm {
 
                 if (*str == '"') {
                     const auto word = get_first_word(str, true);
-                    res += str.source.substr(word.a + 1, word.b - word.a - 2);
-                    if (word.b > str.pos.pos) str += word.b - str.pos.pos;
+                    res += str.source.substr(word.first + 1, word.second - word.first - 2);
+                    if (word.second > str.pos.pos) str += word.second - str.pos.pos;
                     continue;
                 }
 
@@ -917,44 +976,55 @@ namespace mgm {
 
                 if (best_match_score >= 1.0f) {
                     if (num_errs_found > 0) errors.resize(errors.size() - num_errs_found);
-                    std::unordered_map<std::string, std::vector<std::string>> expand_vars{};
+                    GenericValueMap expand_vars{};
                     for (const auto& word : found_words)
                         if (found_rule->words[word.id].type().result() == Rule::Word::Type::GENERIC)
                             expand_vars[found_rule->words[word.id].word.substr(3)].emplace_back(
-                                str.source.substr(word.match.a, word.match.b - word.match.a));
+                                str.source.substr(word.match.first, word.match.second - word.match.first));
 
                     auto expand = found_rule->words.back().word.substr(3);
                     for (size_t j = 0; j < expand.size(); j++) {
                         if (expand[j] == '$') {
                             ++j;
                             auto expand_expr = get_first_word(expand.substr(j), true);
-                            expand_expr = Pair{expand_expr.a + j, expand_expr.b + j};
-                            const auto expand_result =
-                                expand_generic(expand.substr(expand_expr.a, expand_expr.b - expand_expr.a), expand_vars);
+                            expand_expr = std::pair{expand_expr.first + j, expand_expr.second + j};
+                            auto params_expr = get_first_word(expand.substr(expand_expr.second), false);
+                            params_expr =
+                                std::pair{params_expr.first + expand_expr.second, params_expr.second + expand_expr.second};
+                            if (expand[params_expr.first] == '(')
+                                expand_expr.second =
+                                    get_first_word(expand.substr(j + expand_expr.second), true).second + j + expand_expr.second;
+                            const auto expand_result = expand_generic(
+                                expand.substr(expand_expr.first, expand_expr.second - expand_expr.first), expand_vars);
                             if (expand_result.is_error()) {
                                 errors.emplace_back(str.pos, expand_result.error().message);
                                 break;
                             }
-                            expand = expand.substr(0, j - 1) + expand_result.result() + expand.substr(expand_expr.b);
+                            expand = expand.substr(0, j - 1) + expand_result.result() + expand.substr(expand_expr.second);
                             j = j - 1 + expand_result.result().size();
                         }
                     }
                     const auto parse_result = parse(expand);
-                    if (parse_result.is_error())
+                    if (parse_result.is_error()) {
+                        errors.emplace_back(str.pos,
+                                            "Found " + std::to_string(parse_result.error().size()) +
+                                                " errors while parsing expanded string:",
+                                            CompilationError::Severity::ERROR);
                         errors.insert(errors.end(), parse_result.error().begin(), parse_result.error().end());
+                    }
                     else
                         res += parse_result.result();
                     const auto last_word_is_expand =
                         found_rule->words.back().type().result() == Rule::Word::Type::EXPAND ? 2 : 1;
-                    if (found_words[found_words.size() - last_word_is_expand].match.b > str.pos.pos)
-                        str += found_words[found_words.size() - last_word_is_expand].match.b - str.pos.pos;
+                    if (found_words[found_words.size() - last_word_is_expand].match.second > str.pos.pos)
+                        str += found_words[found_words.size() - last_word_is_expand].match.second - str.pos.pos;
                     continue;
                 }
 
                 const auto word = get_first_word(str, false);
-                if (word.b > str.pos.pos) {
-                    errors.emplace_back(str.pos, "Unknown word: " + str.source.substr(word.a, word.b - word.a));
-                    str += word.b - str.pos.pos;
+                if (word.second > str.pos.pos) {
+                    errors.emplace_back(str.pos, "Unknown word: " + str.source.substr(word.first, word.second - word.first));
+                    str += word.second - str.pos.pos;
                 }
             }
 
@@ -962,8 +1032,6 @@ namespace mgm {
             return res;
         }
 
-        ~System() {
-            for (auto& ext : extensions) delete ext.second;
-        }
+        ~System() = default;
     };
 } // namespace mgm
