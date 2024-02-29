@@ -14,16 +14,21 @@ namespace mgm {
         struct Source {
             struct SourceData {
                 char* data = nullptr;
-                size_t size : (sizeof(size_t) * 8 - 1);
-                bool owned : 1;
+                const SourceData* parent = nullptr;
+                std::vector<SourceData*> refs{};
+                size_t size = 0;
 
-                SourceData() : data{nullptr}, size{0}, owned{false} {}
+                SourceData() = default;
 
-                SourceData(const SourceData& other) : data{other.data}, size{other.size}, owned{false} {}
-                SourceData(SourceData&& other) : data{other.data}, size{other.size}, owned{other.owned} {
+                SourceData(const SourceData& other)
+                    : data{other.data}, size{other.size}, parent{other.parent ? other.parent : &other} {
+                    if (parent) const_cast<SourceData*>(parent)->refs.emplace_back(this);
+                }
+                SourceData(SourceData&& other) : data{other.data}, size{other.size}, parent{other.parent} {
                     other.data = nullptr;
+                    other.parent = nullptr;
+                    other.refs.clear();
                     other.size = 0;
-                    other.owned = false;
                 }
                 SourceData& operator=(const SourceData& other) {
                     if (this == &other) return *this;
@@ -38,13 +43,14 @@ namespace mgm {
                     return *this;
                 }
 
-                SourceData(char* const& data, const size_t size) : data{data}, size{size}, owned{false} {}
-                SourceData(const char* const& data_to_copy, const size_t size)
-                    : data{new char[size]}, size{size + 1}, owned{true} {
+                SourceData(const char* const& data_to_copy, const size_t size) : data{new char[size + 1]}, size{size + 1} {
                     memcpy(this->data, data_to_copy, this->size);
                 }
 
-                char& operator[](size_t i) { return data[i]; }
+                char& operator[](size_t i) {
+                    if (parent) make_unique();
+                    return data[i];
+                }
                 const char& operator[](size_t i) const { return data[i]; }
 
                 bool operator==(const SourceData& other) const {
@@ -56,11 +62,12 @@ namespace mgm {
                 bool operator!=(const SourceData& other) const { return !(*this == other); }
 
                 void make_unique() {
-                    if (owned) return;
+                    if (parent == nullptr) return;
                     char* new_data = new char[size];
                     memcpy(new_data, data, size);
                     data = new_data;
-                    owned = true;
+                    const_cast<SourceData*>(parent)->refs.erase(std::find(parent->refs.begin(), parent->refs.end(), this));
+                    parent = nullptr;
                 }
 
                 SourceData sub_source(const size_t pos) const { return SourceData{data + pos, size - pos}; }
@@ -68,7 +75,14 @@ namespace mgm {
                 std::string substr(const size_t pos, const size_t len) const { return std::string{data + pos, len}; }
 
                 ~SourceData() {
-                    if (owned) delete[] data;
+                    if (parent)
+                        const_cast<SourceData*>(parent)->refs.erase(std::find(parent->refs.begin(), parent->refs.end(), this));
+                    else if (!refs.empty())
+                        for (auto& ref : refs) ref->make_unique();
+                    else {
+                        delete[] data;
+                        new (this) SourceData{};
+                    }
                 }
             };
 
@@ -103,7 +117,7 @@ namespace mgm {
             }
 
             Source(const std::string& source, const SourcePos& pos = SourcePos{})
-                : source{source.c_str(), source.size()}, pos{pos} {}
+                : source{source.c_str(), source.size() + 1}, pos{pos} {}
 
             Source& operator++() {
                 if (reached_end()) return *this;
@@ -137,17 +151,14 @@ namespace mgm {
                 return res;
             }
 
-            size_t size() const { return source.size; }
+            size_t size() const { return source.size - 1; }
             bool empty() const { return source.size == 0; }
             bool reached_end() const { return pos.pos >= size() - 1; }
 
             char& operator*() { return (*this)[pos.pos]; }
             const char& operator*() const { return (*this)[pos.pos]; }
 
-            char& operator[](size_t i) {
-                if (!source.owned) source.make_unique();
-                return source[i];
-            }
+            char& operator[](size_t i) { return source[i]; }
             const char& operator[](size_t i) const { return source[i]; }
 
             bool operator==(const Source& other) const {
