@@ -45,7 +45,7 @@ int main() {
                           "   }", "  +\"$SHADER\nvoid main() {\n$($code;\n)}\"");
     mp.rules.emplace_back("   var", "  $type", "  $name", "  +\"uniform $type $name;\"");
     mp.rules.emplace_back("   buffer", "  $type", "  $name",
-                          "  +\"layout(std140, location = $EXPAND_COUNT) buffer $name { $type $name[]; };\"");
+                          "  +\"layout(std140, location = $EXPAND_COUNT(LayoutLocation)) buffer $name { $type $name[]; };\"");
 
     const auto bytecode = mp.parse(test);
     if (bytecode.is_error())

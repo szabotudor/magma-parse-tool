@@ -737,8 +737,6 @@ namespace mgm {
             virtual Result<std::string> operator()(System& system, const GenericValueMap& found_words,
                                                    const std::string& params = "") = 0;
 
-            virtual void clone(Extension* into) const {}
-
             virtual ~Extension() = default;
         };
 
@@ -775,7 +773,7 @@ namespace mgm {
 
             template<typename T, typename... Ts,
                      std::enable_if_t<std::is_base_of_v<Extension, T> && std::is_constructible_v<T, Ts...>, bool> = true>
-            ExtensionContainer& construct(Ts&&... args) {
+            ExtensionContainer& emplace(Ts&&... args) {
                 delete extension;
                 extension = new T{std::forward<Ts>(args)...};
                 clone_func = [](Extension* original) {
@@ -802,38 +800,31 @@ namespace mgm {
         template<typename T, typename... Ts,
                  std::enable_if_t<std::is_base_of_v<Extension, T> && std::is_constructible_v<T, Ts...>, bool> = true>
         void add_extension(const std::string& name, Ts&&... args) {
-            extensions[name].construct<T>(std::forward<T>(args)...);
+            extensions[name].emplace<T>(std::forward<T>(args)...);
         }
 
       private:
         struct ExpandCountExtension : public Extension {
             using Extension::Extension;
             size_t count{};
+            std::unordered_map<std::string, size_t> counts{};
             System::Result<std::string> operator()(System& system, const System::GenericValueMap& found_words,
                                                    const std::string& params) override {
-                return std::to_string(count++);
-            }
-        };
-        struct SimpleCalcExtension : public Extension {
-            using Extension::Extension;
-            Result<std::string> operator()(System& system, const System::GenericValueMap& found_words,
-                                           const std::string& params) override {
-                if (params.empty()) return Error{-1, "No expression to calculate"};
-                static thread_local Rule rule{" *$val", "^* +", "^* -", "^* *", "^* /", "^* %", "   END", "  + "};
-                const auto match = rule.match(params + " END");
-                if (match.is_error()) return Error{-1, match.error().message};
+                if (params.empty()) return std::to_string(count++);
 
-                for (const auto& w : match.result()) {
-                    const auto word = params.substr(w.match.first, w.match.second - w.match.first);
-                    const auto type = rule.words[w.id].type().result();
-                    switch (type) {
-                        case Rule::Word::Type::GENERIC: {
-                        }
-                        default:
-                            return Error{-1, "Invalid word type"};
-                    }
+                const auto word = get_first_word(params, false);
+                if (word.second == 0) return Error{-1, "No word to expand"};
+                const auto var = params.substr(word.first, word.second - word.first);
+
+                if (var == "RESET") {
+                    count = 0;
+                    counts.clear();
+                    return std::to_string(count++);
                 }
-                return std::string{};
+
+                const auto it = counts.find(var);
+                if (it == counts.end()) return std::to_string(counts.emplace(var, 0).first->second++);
+                return std::to_string(it->second++);
             }
         };
 
@@ -841,7 +832,6 @@ namespace mgm {
         void enable_default_extensions() {
             extensions.clear();
             add_extension<ExpandCountExtension>("EXPAND_COUNT", ExpandCountExtension{});
-            add_extension<SimpleCalcExtension>("CALC", SimpleCalcExtension{});
         }
         System(const std::vector<Rule>& rules = {}, const std::unordered_map<std::string, ExtensionContainer>& extensions = {})
             : rules{rules}, extensions{extensions} {}
@@ -934,8 +924,8 @@ namespace mgm {
                     return ext_result.result();
                 }
                 const auto& expand_to = expand_vars.find(var_name);
-                if (expand_to == expand_vars.end()) return Error{-1, "Variable not found"};
-                if (expand_to->second.empty()) return Error{-1, "Variable not found"};
+                if (expand_to == expand_vars.end()) return Error{-1, '"' + var_name + '"' + " is not a variable or extension"};
+                if (expand_to->second.empty()) return Error{-1, "Variable \"" + var_name + '"' + " has no value(s)"};
                 return expand_to->second.front();
             }
 
