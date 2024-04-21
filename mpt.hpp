@@ -22,7 +22,8 @@ namespace mgm {
 
                 SourceData(const SourceData& other)
                     : data{other.data}, size{other.size}, parent{other.parent ? other.parent : &other} {
-                    if (parent) const_cast<SourceData*>(parent)->refs.emplace_back(this);
+                    if (parent)
+                        const_cast<SourceData*>(parent)->refs.emplace_back(this);
                 }
                 SourceData(SourceData&& other) : data{other.data}, size{other.size}, parent{other.parent} {
                     other.data = nullptr;
@@ -31,13 +32,15 @@ namespace mgm {
                     other.size = 0;
                 }
                 SourceData& operator=(const SourceData& other) {
-                    if (this == &other) return *this;
+                    if (this == &other)
+                        return *this;
                     this->~SourceData();
                     new (this) SourceData{other};
                     return *this;
                 }
                 SourceData& operator=(SourceData&& other) {
-                    if (this == &other) return *this;
+                    if (this == &other)
+                        return *this;
                     this->~SourceData();
                     new (this) SourceData{std::move(other)};
                     return *this;
@@ -48,21 +51,25 @@ namespace mgm {
                 }
 
                 char& operator[](size_t i) {
-                    if (parent) make_unique();
+                    if (parent)
+                        make_unique();
                     return data[i];
                 }
                 const char& operator[](size_t i) const { return data[i]; }
 
                 bool operator==(const SourceData& other) const {
-                    if (size != other.size) return false;
+                    if (size != other.size)
+                        return false;
                     for (size_t i = 0; i < size; i++)
-                        if (data[i] != other.data[i]) return false;
+                        if (data[i] != other.data[i])
+                            return false;
                     return true;
                 }
                 bool operator!=(const SourceData& other) const { return !(*this == other); }
 
                 void make_unique() {
-                    if (parent == nullptr) return;
+                    if (parent == nullptr)
+                        return;
                     char* new_data = new char[size];
                     memcpy(new_data, data, size);
                     data = new_data;
@@ -104,13 +111,15 @@ namespace mgm {
             Source(const Source& other) : source{other.source}, pos{other.pos} {}
             Source(Source&& other) : source{std::move(other.source)}, pos{other.pos} {}
             Source& operator=(const Source& other) {
-                if (this == &other) return *this;
+                if (this == &other)
+                    return *this;
                 this->~Source();
                 new (this) Source{other};
                 return *this;
             }
             Source& operator=(Source&& other) {
-                if (this == &other) return *this;
+                if (this == &other)
+                    return *this;
                 this->~Source();
                 new (this) Source{std::move(other)};
                 return *this;
@@ -120,7 +129,8 @@ namespace mgm {
                 : source{source.c_str(), source.size() + 1}, pos{pos} {}
 
             Source& operator++() {
-                if (reached_end()) return *this;
+                if (reached_end())
+                    return *this;
 
                 if (source[pos.pos] == '\n') {
                     ++pos.line;
@@ -162,15 +172,18 @@ namespace mgm {
             const char& operator[](size_t i) const { return source[i]; }
 
             bool operator==(const Source& other) const {
-                if (pos != other.pos) return false;
+                if (pos != other.pos)
+                    return false;
                 return source == other.source;
             }
             bool operator!=(const Source& other) const { return !(*this == other); }
 
             bool matches(const std::string& str) const {
-                if (str.size() > size() - pos.pos) return false;
+                if (str.size() > size() - pos.pos)
+                    return false;
                 for (size_t i = 0; i < str.size(); i++)
-                    if (source[pos.pos + i] != str[i]) return false;
+                    if (source[pos.pos + i] != str[i])
+                        return false;
                 return true;
             }
         };
@@ -198,7 +211,8 @@ namespace mgm {
 
             ~CompilationError() = default;
         };
-        template<typename T, typename E = Error> struct Result {
+        template<typename T, typename E = Error>
+        struct Result {
             union _Result {
                 T value;
                 E error;
@@ -237,14 +251,16 @@ namespace mgm {
             Result(const Result& res) : _is_error{res._is_error} { copy(res); }
             Result(Result&& res) : _is_error{res._is_error} { move(res); }
             Result& operator=(const Result& res) {
-                if (this == &res) return *this;
+                if (this == &res)
+                    return *this;
                 this->~Result();
                 _is_error = res._is_error;
                 copy(res);
                 return *this;
             }
             Result& operator=(Result&& res) {
-                if (this == &res) return *this;
+                if (this == &res)
+                    return *this;
                 this->~Result();
                 _is_error = res._is_error;
                 move(res);
@@ -274,13 +290,15 @@ namespace mgm {
 
             T& result() {
 #ifdef ALLOW_THROW
-                if (is_error()) throw std::runtime_error{_result.error.message.data()};
+                if (is_error())
+                    throw std::runtime_error{_result.error.message.data()};
 #endif
                 return _result.value;
             }
             const T& result() const {
 #ifdef ALLOW_THROW
-                if (is_error()) throw std::runtime_error{"Result is error"};
+                if (is_error())
+                    throw std::runtime_error{"Result is error"};
 #endif
                 return _result.value;
             }
@@ -328,14 +346,18 @@ namespace mgm {
 
             while (res.second < str.size() && st >= 1) {
                 ++res.second;
-                if (str[res.second] == beg) ++st;
-                if (str[res.second] == end) --st;
+                if (str[res.second] == beg)
+                    ++st;
+                if (str[res.second] == end)
+                    --st;
             }
-            if (str[res.second] == end) ++res.second;
+            if (str[res.second] == end)
+                ++res.second;
             return res;
         }
         static std::pair<size_t, size_t> get_first_word(const Source& str, bool full_brace) {
-            if (str.empty()) return {};
+            if (str.empty())
+                return {};
             std::pair<size_t, size_t> res{str.pos.pos, str.pos.pos};
             enum _Mode { WHITESPACE, NUM, ALPHA, SYM } mode = WHITESPACE;
 
@@ -391,11 +413,13 @@ namespace mgm {
                         case '&':
                         case '|':
                         case '=':
-                            if (str[res.first + 1] == str[res.first]) return {res.first, res.second + 2};
+                            if (str[res.first + 1] == str[res.first])
+                                return {res.first, res.second + 2};
                         case '/':
                         case '^':
                         case '%': {
-                            if (str[res.first + 1] == '=') return {res.first, res.second + 2};
+                            if (str[res.first + 1] == '=')
+                                return {res.first, res.second + 2};
                             return {res.first, res.second + 1};
                         }
                         case '"': {
@@ -403,7 +427,8 @@ namespace mgm {
                             while ((str[res.second] != '"' || (str[res.second] == '"' && str[res.second - 1] == '\\')) &&
                                    str[res.second] != '\0')
                                 ++res.second;
-                            if (str[res.second] == '"') ++res.second;
+                            if (str[res.second] == '"')
+                                ++res.second;
                             return res;
                         }
                         default: {
@@ -426,7 +451,8 @@ namespace mgm {
 
                 bool empty() const { return word.empty(); }
                 Result<OptionalType> optional() const {
-                    if (empty()) return Error{-1, "Word is empty"};
+                    if (empty())
+                        return Error{-1, "Word is empty"};
                     switch (word[0]) {
                         case ' ':
                             return OptionalType::MANDATORY;
@@ -439,7 +465,8 @@ namespace mgm {
                     }
                 }
                 Result<RepeatType> repeat() const {
-                    if (empty()) return Error{-1, "Word is empty"};
+                    if (empty())
+                        return Error{-1, "Word is empty"};
                     switch (word[1]) {
                         case ' ':
                             return RepeatType::ONCE;
@@ -452,7 +479,8 @@ namespace mgm {
                     }
                 }
                 Result<Type> type() const {
-                    if (empty()) return Error{-1, "Word is empty"};
+                    if (empty())
+                        return Error{-1, "Word is empty"};
                     switch (word[2]) {
                         case ' ':
                             return Type::DIRECT;
@@ -472,18 +500,21 @@ namespace mgm {
                 Word(const Word& other) : word{other.word} {}
                 Word(Word&& other) : word{std::move(other.word)} {}
                 Word& operator=(const Word& other) {
-                    if (this == &other) return *this;
+                    if (this == &other)
+                        return *this;
                     word = other.word;
                     return *this;
                 }
                 Word& operator=(Word&& other) {
-                    if (this == &other) return *this;
+                    if (this == &other)
+                        return *this;
                     word = std::move(other.word);
                     return *this;
                 }
 
                 Word(const std::string& str) : word{str} {
-                    if (optional().is_error() || repeat().is_error() || type().is_error()) word.clear();
+                    if (optional().is_error() || repeat().is_error() || type().is_error())
+                        word.clear();
                     if (type().result() == Type::EXPAND &&
                         (repeat().result() != RepeatType::ONCE || optional().result() != OptionalType::MANDATORY))
                         word.clear();
@@ -546,21 +577,25 @@ namespace mgm {
             }
 
             Result<bool> is_valid() const {
-                if (words.empty()) return Error{1, "Rule is empty"};
+                if (words.empty())
+                    return Error{1, "Rule is empty"};
 
                 const auto last_word_type = words.back().type();
-                if (last_word_type.is_error()) return Error{2, "Invalid rule. Contains malformed word"};
+                if (last_word_type.is_error())
+                    return Error{2, "Invalid rule. Contains malformed word"};
                 if (last_word_type.result() != Word::Type::EXPAND)
                     return Error{3, "Invalid rule. Last word must be of type EXPAND"};
 
                 const auto last_word_repeat = words[words.size() - 1].repeat();
-                if (last_word_repeat.is_error()) return Error{2, "Invalid rule. Contains malformed word"};
+                if (last_word_repeat.is_error())
+                    return Error{2, "Invalid rule. Contains malformed word"};
                 if (last_word_repeat.result() != Word::RepeatType::ONCE)
                     return Error{5, "Invalid rule. Last word cannot be repeating"};
 
                 for (size_t i = 0; i < words.size(); i++) {
                     const auto& word = words[i];
-                    if (word.type().is_error()) return Error{2, "Invalid rule. Contains malformed word"};
+                    if (word.type().is_error())
+                        return Error{2, "Invalid rule. Contains malformed word"};
 
                     if (word.repeat().result() != Word::RepeatType::ONCE &&
                         words[i + 1].optional().result() != Word::OptionalType::MANDATORY)
@@ -593,7 +628,8 @@ namespace mgm {
                             *found_word_b_return = first_word.second;
                         }
                         const auto word_desc = get_first_word(str, false);
-                        if (word_desc.second - word_desc.first == 0) return Error{-1, "Expected word"};
+                        if (word_desc.second - word_desc.first == 0)
+                            return Error{-1, "Expected word"};
                         if (!(str + (word_desc.first - str.pos.pos)).matches(word.word.substr(3)))
                             return Error{-1, "Word does not match expected word"};
                         return std::pair{word_desc.first, word_desc.first + word.word.size() - 3};
@@ -601,13 +637,16 @@ namespace mgm {
                     case Word::Type::GENERIC: {
                         if (word_id == num_words() - 1) {
                             const auto first_word = get_first_word(str, true);
-                            if (first_word.second - first_word.first == 0) return Error{-1, "Expected word"};
-                            if (found_word_b_return) *found_word_b_return = first_word.second;
+                            if (first_word.second - first_word.first == 0)
+                                return Error{-1, "Expected word"};
+                            if (found_word_b_return)
+                                *found_word_b_return = first_word.second;
                             return first_word;
                         }
                         auto first_word = get_first_word(str, true);
                         auto str_cpy = str;
-                        if (first_word.second - first_word.first == 0) return Error{-1, "Expected word"};
+                        if (first_word.second - first_word.first == 0)
+                            return Error{-1, "Expected word"};
                         size_t i = first_word.second;
                         size_t next_word_id = word_id + 1;
                         size_t backup_word = next_word_id;
@@ -627,12 +666,15 @@ namespace mgm {
                         if (i > 0)
                             while (is_whitespace(str[i - 1])) --i;
                         first_word.second = i;
-                        if (first_word.second < first_word.first) return Error{-1, "Expected word"};
-                        if (found_word_b_return) *found_word_b_return = i;
+                        if (first_word.second < first_word.first)
+                            return Error{-1, "Expected word"};
+                        if (found_word_b_return)
+                            *found_word_b_return = i;
                         return first_word;
                     }
                     case Word::Type::EXPAND: {
-                        if (found_word_b_return) *found_word_b_return = (size_t)str.size();
+                        if (found_word_b_return)
+                            *found_word_b_return = (size_t)str.size();
                         size_t i = 0;
                         while (is_whitespace(str[i])) ++i;
                         return std::pair{i, i};
@@ -645,11 +687,18 @@ namespace mgm {
             }
 
           public:
-            Result<std::vector<WordMatch>, CompilationError> match(const Source& str) const {
-                if (str.empty()) return CompilationError{{}, "String is empty", CompilationError::Severity::ERROR};
+            Result<std::vector<WordMatch>, std::pair<std::vector<WordMatch>, CompilationError>> match(const Source& str) const {
+                if (str.empty())
+                    return std::pair{
+                        std::vector<WordMatch>{},
+                        CompilationError{{}, "String is empty", CompilationError::Severity::ERROR}
+                    };
                 const auto valid = is_valid();
                 if (valid.is_error())
-                    return CompilationError{{}, valid.error().message, CompilationError::Severity::SYSTEM_ERROR};
+                    return std::pair{
+                        std::vector<WordMatch>{},
+                        CompilationError{{}, valid.error().message, CompilationError::Severity::SYSTEM_ERROR}
+                    };
 
                 std::vector<WordMatch> res{};
                 res.reserve(words.size());
@@ -667,8 +716,10 @@ namespace mgm {
                         }
                         if (words[i].repeat().result() == Word::RepeatType::REPEAT_SINGLE) {
                             if (!repeating && words[i].optional().result() != Word::OptionalType::OPTIONAL)
-                                return CompilationError{(str + pos).pos, "Single repeating word not found",
-                                                        CompilationError::Severity::ERROR};
+                                return std::pair{
+                                    res, CompilationError{(str + pos).pos, "Single repeating word not found",
+                                                          CompilationError::Severity::ERROR}
+                                };
                             repeating = false;
                             ++i;
                             continue;
@@ -677,19 +728,23 @@ namespace mgm {
                             if (words[i].repeat().result() == Word::RepeatType::REPEAT) {
                                 while (words[i].repeat().result() == Word::RepeatType::REPEAT) ++i;
                                 word_match = ensure_word_match(str + pos, i);
-                                if (!word_match.is_error()) continue;
+                                if (!word_match.is_error())
+                                    continue;
                             }
                             if (i > 0) {
                                 while (words[i - 1].repeat().result() == Word::RepeatType::REPEAT) {
                                     --i;
-                                    if (i == 0) break;
+                                    if (i == 0)
+                                        break;
                                 }
                                 word_match = ensure_word_match(str + pos, i);
-                                if (!word_match.is_error()) continue;
+                                if (!word_match.is_error())
+                                    continue;
                             }
-                            return CompilationError{(str + pos).pos,
-                                                    "Repeating word not found or no closer was found after repeating words",
-                                                    CompilationError::Severity::ERROR};
+                            return std::pair{
+                                res, CompilationError{(str + pos).pos,
+                                                      "Repeating word not found or no closer was found after repeating words", CompilationError::Severity::ERROR}
+                            };
                         }
                         if (words[i].optional().result() == Word::OptionalType::OPTIONAL) {
                             ++i;
@@ -697,15 +752,19 @@ namespace mgm {
                         }
                         if (words[i].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE) {
                             if (words[i + 1].optional().result() != Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE)
-                                return CompilationError{(str + pos).pos,
-                                                        "Word should match at least one option in optional list",
-                                                        CompilationError::Severity::ERROR};
+                                return std::pair{
+                                    res,
+                                    CompilationError{(str + pos).pos, "Word should match at least one option in optional list",
+                                                     CompilationError::Severity::ERROR}
+                                };
                             while (words[i].optional().result() == Word::OptionalType::OPTIONAL_LIST_MANDATORY_ONE) ++i;
                             continue;
                         }
-                        return CompilationError{(str + pos).pos,
-                                                std::string{"Word \""} + words[i].word.substr(3) + "\" not found",
-                                                CompilationError::Severity::ERROR};
+                        return std::pair{
+                            res,
+                            CompilationError{(str + pos).pos, std::string{"Word \""} + words[i].word.substr(3) + "\" not found",
+                                             CompilationError::Severity::ERROR}
+                        };
                     }
                     pos = word_match.result().second;
                     res.emplace_back(WordMatch{i, word_match.result()});
@@ -755,14 +814,16 @@ namespace mgm {
                 other.clone_func = nullptr;
             }
             ExtensionContainer& operator=(const ExtensionContainer& other) {
-                if (this == &other) return *this;
+                if (this == &other)
+                    return *this;
                 delete extension;
                 extension = other.clone_func(other.extension);
                 clone_func = other.clone_func;
                 return *this;
             }
             ExtensionContainer& operator=(ExtensionContainer&& other) {
-                if (this == &other) return *this;
+                if (this == &other)
+                    return *this;
                 delete extension;
                 extension = other.extension;
                 clone_func = other.clone_func;
@@ -783,7 +844,8 @@ namespace mgm {
             }
 
             Result<std::string> operator()(System& system, const GenericValueMap& found_words, const std::string& params = "") {
-                if (!extension) return Error{-1, "Extension is empty"};
+                if (!extension)
+                    return Error{-1, "Extension is empty"};
                 return (*extension)(system, found_words, params);
             }
 
@@ -810,10 +872,12 @@ namespace mgm {
             std::unordered_map<std::string, size_t> counts{};
             System::Result<std::string> operator()(System& system, const System::GenericValueMap& found_words,
                                                    const std::string& params) override {
-                if (params.empty()) return std::to_string(count++);
+                if (params.empty())
+                    return std::to_string(count++);
 
                 const auto word = get_first_word(params, false);
-                if (word.second == 0) return Error{-1, "No word to expand"};
+                if (word.second == 0)
+                    return Error{-1, "No word to expand"};
                 const auto var = params.substr(word.first, word.second - word.first);
 
                 if (var == "RESET") {
@@ -823,7 +887,8 @@ namespace mgm {
                 }
 
                 const auto it = counts.find(var);
-                if (it == counts.end()) return std::to_string(counts.emplace(var, 0).first->second++);
+                if (it == counts.end())
+                    return std::to_string(counts.emplace(var, 0).first->second++);
                 return std::to_string(it->second++);
             }
         };
@@ -843,7 +908,8 @@ namespace mgm {
       private:
         Result<std::string> expand_generic(const std::string& str, const GenericValueMap& expand_vars) {
             const auto expr_to_expand = get_first_word(str, true);
-            if (expr_to_expand.second - expr_to_expand.first == 0) return Error{-1, "Expected expression after $"};
+            if (expr_to_expand.second - expr_to_expand.first == 0)
+                return Error{-1, "Expected expression after $"};
 
             if (str[expr_to_expand.first] == '(') {
                 std::vector<std::pair<std::string, Rule::Word::Type>> words_in_expr{};
@@ -857,7 +923,8 @@ namespace mgm {
                         if (str[word_to_expand.first] == '(') {
                             const auto expand_result = expand_generic(
                                 str.substr(word_to_expand.first, word_to_expand.second - word_to_expand.first), expand_vars);
-                            if (expand_result.is_error()) return expand_result.error();
+                            if (expand_result.is_error())
+                                return expand_result.error();
                             words_in_expr.emplace_back(expand_result.result(), Rule::Word::Type::DIRECT);
                         }
                         else if (is_alpha(str[word_to_expand.first])) {
@@ -874,7 +941,8 @@ namespace mgm {
                     }
                 }
 
-                if (words_in_expr.size() != exprs_to_expand.size()) return Error{-1, "Unknown internal error"};
+                if (words_in_expr.size() != exprs_to_expand.size())
+                    return Error{-1, "Unknown internal error"};
 
                 std::string res{};
                 size_t last_word_end = 1;
@@ -916,16 +984,20 @@ namespace mgm {
                     if (str[params_expr.first] == '(') {
                         const auto ext_result =
                             ext->second(*this, expand_vars, str.substr(params_expr.first + 1, params_expr.second - 1));
-                        if (ext_result.is_error()) return ext_result.error();
+                        if (ext_result.is_error())
+                            return ext_result.error();
                         return ext_result.result();
                     }
                     const auto ext_result = ext->second(*this, expand_vars, "");
-                    if (ext_result.is_error()) return ext_result.error();
+                    if (ext_result.is_error())
+                        return ext_result.error();
                     return ext_result.result();
                 }
                 const auto& expand_to = expand_vars.find(var_name);
-                if (expand_to == expand_vars.end()) return Error{-1, '"' + var_name + '"' + " is not a variable or extension"};
-                if (expand_to->second.empty()) return Error{-1, "Variable \"" + var_name + '"' + " has no value(s)"};
+                if (expand_to == expand_vars.end())
+                    return Error{-1, '"' + var_name + '"' + " is not a variable or extension"};
+                if (expand_to->second.empty())
+                    return Error{-1, "Variable \"" + var_name + '"' + " has no value(s)"};
                 return expand_to->second.front();
             }
 
@@ -933,50 +1005,61 @@ namespace mgm {
         }
 
       public:
-        Result<std::string, std::vector<CompilationError>> parse(Source str) {
+        Result<std::string, std::vector<CompilationError>> parse(Source str, const bool instant_fail = false) {
             std::string res{};
             std::vector<CompilationError> errors{};
 
             for (; !str.reached_end(); ++str) {
+                if (!errors.empty() && instant_fail)
+                    return errors;
+
                 while (is_whitespace(*str)) ++str;
 
                 if (*str == '"') {
                     const auto word = get_first_word(str, true);
                     res += str.source.substr(word.first + 1, word.second - word.first - 2);
-                    if (word.second > str.pos.pos) str += word.second - str.pos.pos;
+                    if (word.second > str.pos.pos)
+                        str += word.second - str.pos.pos;
                     continue;
                 }
 
                 const Rule* found_rule = nullptr;
                 std::vector<Rule::WordMatch> found_words{};
                 float best_match_score = 0.0f;
+                CompilationError rule_match_error{0, ""};
 
-                size_t num_errs_found = 0;
                 for (const auto& rule : rules) {
                     const auto _found_words = rule.match(str);
-                    if (_found_words.is_error()) {
-                        errors.emplace_back(_found_words.error().pos, _found_words.error().message);
-                        ++num_errs_found;
+                    float match_score = 0.0f;
+                    std::vector<Rule::WordMatch> _found_words_result{};
+                    if (_found_words.is_error())
+                        _found_words_result = _found_words.error().first;
+                    else
+                        _found_words_result = _found_words.result();
+
+                    if (_found_words_result.empty()) {
+                        if (best_match_score == 0.0f && rule_match_error.message.empty())
+                            rule_match_error = _found_words.error().second;
                         continue;
                     }
-                    if (_found_words.result().size() > 0) {
-                        float match_score = (float)(_found_words.result().back().id + 1) / (float)rule.words.size();
-                        if (match_score == 1.0f &&
-                            rule.words[rule.words.size() - 2].type().result() == Rule::Word::Type::DIRECT &&
-                            rule.words.back().type().result() == Rule::Word::Type::EXPAND)
-                            match_score = 2.0f;
 
-                        if (match_score > best_match_score) {
-                            found_rule = &rule;
-                            found_words = _found_words.result();
-                            best_match_score = match_score;
-                        }
-                        if (best_match_score == 2.0f) break;
+                    match_score = float(_found_words_result.back().id + 1) / float(rule.words.size());
+
+                    if (match_score == 1.0f && rule.words[rule.words.size() - 2].type().result() == Rule::Word::Type::DIRECT)
+                        match_score = 2.0f;
+
+                    if (match_score > best_match_score) {
+                        found_rule = &rule;
+                        found_words = _found_words_result;
+                        best_match_score = match_score;
                     }
+                    if (best_match_score < 1.0f)
+                        rule_match_error = _found_words.error().second;
+                    if (best_match_score == 2.0f)
+                        break;
                 }
 
                 if (best_match_score >= 1.0f) {
-                    if (num_errs_found > 0) errors.resize(errors.size() - num_errs_found);
                     GenericValueMap expand_vars{};
                     for (const auto& word : found_words)
                         if (found_rule->words[word.id].type().result() == Rule::Word::Type::GENERIC)
@@ -999,11 +1082,16 @@ namespace mgm {
                                 expand.substr(expand_expr.first, expand_expr.second - expand_expr.first), expand_vars);
                             if (expand_result.is_error()) {
                                 errors.emplace_back(str.pos, expand_result.error().message);
+                                expand.clear();
                                 break;
                             }
                             expand = expand.substr(0, j - 1) + expand_result.result() + expand.substr(expand_expr.second);
                             j = j - 1 + expand_result.result().size();
                         }
+                    }
+                    if (expand.empty()) {
+                        str += found_words.back().match.second - str.pos.pos;
+                        continue;
                     }
                     const auto parse_result = parse(expand);
                     if (parse_result.is_error()) {
@@ -1011,7 +1099,8 @@ namespace mgm {
                                             "Found " + std::to_string(parse_result.error().size()) +
                                                 " errors while parsing expanded string:",
                                             CompilationError::Severity::ERROR);
-                        errors.insert(errors.end(), parse_result.error().begin(), parse_result.error().end());
+                        for (const auto& err : parse_result.error())
+                            errors.emplace_back((str + err.pos.pos).pos, err.message, err.severity, err.fix);
                     }
                     else
                         res += parse_result.result();
@@ -1022,14 +1111,20 @@ namespace mgm {
                     continue;
                 }
 
-                const auto word = get_first_word(str, false);
-                if (word.second > str.pos.pos) {
-                    errors.emplace_back(str.pos, "Unknown word: " + str.source.substr(word.first, word.second - word.first));
+                if (found_words.empty()) {
+                    errors.emplace_back(rule_match_error);
+                    const auto word = get_first_word(str, true);
                     str += word.second - str.pos.pos;
+                    continue;
+                }
+                if (found_words.back().match.second > str.pos.pos) {
+                    errors.emplace_back(rule_match_error);
+                    str += found_words.back().match.second - str.pos.pos;
                 }
             }
 
-            if (!errors.empty()) return errors;
+            if (!errors.empty())
+                return errors;
             return res;
         }
 

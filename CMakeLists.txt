@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.27)
 project(MPT)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
 set(
     SOURCES

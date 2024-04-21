@@ -22,10 +22,10 @@ struct ShaderExtension : public mgm::System::Extension {
                                                         const std::string&) override {
         std::string res = "#version 450 core\n";
         for (const auto& word : found_words.at("var")) {
-            const auto parsed_word = system.parse(word);
+            const auto parsed_word = system.parse(word, true);
             if (parsed_word.is_error()) {
-                for (const auto& err : parsed_word.error())
-                    std::cerr << "Error at " << err.pos.line << ':' << err.pos.column << "\n\t" << err.message << std::endl;
+                // for (const auto& err : parsed_word.error())
+                //     std::cerr << "Error at " << err.pos.line << ':' << err.pos.column << "\n\t" << err.message << std::endl;
                 return mgm::System::Error{static_cast<int64_t>(parsed_word.error()[0].code), parsed_word.error()[0].message};
             }
             res += parsed_word.result() + '\n';

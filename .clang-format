@@ -52,7 +52,6 @@ AlignArrayOfStructures: Left
 AlignEscapedNewlines: Left
 AllowShortEnumsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: All
-AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortLambdasOnASingleLine: None
 AllowShortLoopsOnASingleLine: true
 AlwaysBreakTemplateDeclarations: MultiLine
